@@ -42,6 +42,15 @@ struct Snake
 };
 
 /// <summary>
+/// Struct for handling score.
+/// </summary>
+struct Score
+{
+	Texture* texture = NULL;
+	int score = 0;
+};
+
+/// <summary>
 /// A basic snake game written with SDL2 and the CrispyOctoSporkEngine.
 /// </summary>
 class SnakeGame : public Engine
@@ -61,7 +70,9 @@ private:
 
 	Snake* snake = NULL;
 	Apple* apple = NULL;
+	Score* score = NULL;
 	Texture* menu = NULL;
+	Texture* lose = NULL;
 
 	SoundEffect* nice = NULL;
 
@@ -69,14 +80,18 @@ private:
 	{
 		snake = new Snake();
 		apple = new Apple();
+		score = new Score();
 
 		snake->texture = new Texture(renderer);
 		apple->texture = new Texture(renderer);
+		score->texture = new Texture(renderer, "assets/coder-crux.ttf", 28);
 		menu = new Texture(renderer);
+		lose = new Texture(renderer);
 
 		snake->texture->LoadTextureFromFile("assets/snake.png");
 		apple->texture->LoadTextureFromFile("assets/apple.png");
 		menu->LoadTextureFromFile("assets/menu.png");
+		lose->LoadTextureFromFile("assets/lose.png");
 
 		nice = new SoundEffect();
 
@@ -93,6 +108,7 @@ private:
 		snake->yVelocity = 0;
 		snake->tailLength = 6;
 		snake->tail.clear();
+
 		for (int i = 0; i < snake->tailLength; i++)
 		{
 			snake->tail.push_back({ startingX + (-snake->xVelocity * i), startingY });
@@ -100,6 +116,9 @@ private:
 
 		apple->x = rand() % GRID_WIDTH;
 		apple->y = rand() % GRID_HEIGHT;
+
+		score->score = 0;
+		score->texture->LoadFromRenderedText("Score: " + std::to_string(score->score), COLOR_WHITE);
 
 		return true;
 	}
@@ -115,6 +134,9 @@ private:
 			break;
 		case GameState::PLAYING:
 			OnEventPlaying(currentKeyStates);
+			break;
+		case GameState::LOSE:
+			OnEventMenu(currentKeyStates);
 			break;
 		}
 
@@ -134,25 +156,37 @@ private:
 
 	bool OnEventPlaying(const Uint8* currentKeyStates)
 	{
-		if (currentKeyStates[SDL_SCANCODE_W])
+		if (currentKeyStates[SDL_SCANCODE_W] || currentKeyStates[SDL_SCANCODE_UP])
 		{
-			snake->yVelocity = -1.0;
-			snake->xVelocity = 0;
+			if (snake->yVelocity != 1.0) 
+			{
+				snake->yVelocity = -1.0;
+				snake->xVelocity = 0;
+			}			
 		}
-		else if (currentKeyStates[SDL_SCANCODE_S])
+		else if (currentKeyStates[SDL_SCANCODE_S] || currentKeyStates[SDL_SCANCODE_DOWN])
 		{
-			snake->yVelocity = 1.0;
-			snake->xVelocity = 0;
+			if (snake->yVelocity != -1.0) 
+			{
+				snake->yVelocity = 1.0;
+				snake->xVelocity = 0;
+			}			
 		}
-		else if (currentKeyStates[SDL_SCANCODE_A])
+		else if (currentKeyStates[SDL_SCANCODE_A] || currentKeyStates[SDL_SCANCODE_LEFT])
 		{
-			snake->yVelocity = 0;
-			snake->xVelocity = -1.0;
+			if (snake->xVelocity != 1.0) 
+			{
+				snake->yVelocity = 0;
+				snake->xVelocity = -1.0;
+			}			
 		}
-		else if (currentKeyStates[SDL_SCANCODE_D])
+		else if (currentKeyStates[SDL_SCANCODE_D] || currentKeyStates[SDL_SCANCODE_RIGHT])
 		{
-			snake->yVelocity = 0;
-			snake->xVelocity = 1.0;
+			if (snake->xVelocity != -1.0)
+			{
+				snake->yVelocity = 0;
+				snake->xVelocity = 1.0;
+			}			
 		}
 		else if (currentKeyStates[SDL_SCANCODE_ESCAPE])
 		{
@@ -171,6 +205,9 @@ private:
 			break;
 		case GameState::PLAYING:
 			OnUpdatePlaying(deltaTime);
+			break;
+		case GameState::LOSE:
+			OnUpdateLose(deltaTime);
 			break;
 		}
 
@@ -226,12 +263,23 @@ private:
 				newHeadY = GRID_HEIGHT - 1;
 			}
 
+			for (int i = 0; i < snake->tailLength; i++)
+			{
+				if ((snake->tail[i].x == newHeadX) && (snake->tail[i].y == newHeadY))
+				{
+					state = GameState::LOSE;
+				}
+			}
+
 			Tail head = { newHeadX, newHeadY};
 			snake->tail.insert(snake->tail.begin(), head);
 
 			if ((snake->tail[0].x == apple->x) && (snake->tail[0].y == apple->y))
-			{				
-				nice->PlaySound();
+			{
+				//nice->PlaySound();
+				score->score++;
+				score->texture->LoadFromRenderedText("Score: " + std::to_string(score->score), COLOR_WHITE);
+
 				bool validAppleSpawn = false;
 
 				while (!validAppleSpawn)
@@ -264,6 +312,16 @@ private:
 			snake->texture->Render(snake->tail[i].x * GRID_SIZE, snake->tail[i].y * GRID_SIZE);
 		}
 
+		score->texture->Render(10, 10);
+
+		return true;
+	}
+
+	bool OnUpdateLose(float deltaTime)
+	{
+		lose->Render(0, 0);
+		score->texture->Render(WIDTH / 2 - score->texture->width / 2, HEIGHT / 2 - score->texture->height / 2);
+
 		return true;
 	}
 
@@ -272,17 +330,22 @@ private:
 		// clean up textures
 		snake->texture->Free();
 		apple->texture->Free();
+		score->texture->Free();
+		lose->Free();
 
 		nice->Free();
 
 		// free the pointers
 		delete snake->texture;
 		delete apple->texture;
+		delete score->texture;
 
 		// kill all the objects
 		delete snake;
 		delete apple;
 		delete menu;
+		delete score;
+		delete lose;
 		
 		delete nice;
 

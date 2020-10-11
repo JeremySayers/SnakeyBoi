@@ -2,6 +2,7 @@
 #include <SDL.h>
 #include <SDL_image.h>
 #include <SDL_mixer.h>
+#include <SDL_TTF.h>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -59,7 +60,7 @@ namespace CrispyOctoSpork
 	/// <summary>
 	/// A few SDL_Colors to use.
 	/// </summary>
-	SDL_Color COLOR_RED = { 255, 0, 0, 255 }, COLOR_GREEN = { 0, 255, 0, 255 }, COLOR_BLUE = { 0, 0, 255, 255 };
+	SDL_Color COLOR_RED = { 255, 0, 0, 255 }, COLOR_GREEN = { 0, 255, 0, 255 }, COLOR_BLUE = { 0, 0, 255, 255 }, COLOR_WHITE = {255, 255, 255, 255};
 
 	/// <summary>
 	/// Class for calculating and storing the current frame rate.
@@ -213,7 +214,7 @@ namespace CrispyOctoSpork
 		/// <summary>
 		/// Creates a new instance of <see cref="Texture"/>.
 		/// </summary>
-		Texture(SDL_Renderer* renderer);
+		Texture(SDL_Renderer* renderer, const char* fontFilePath = NULL, int fontSize = 0);
 
 		/// <summary>
 		/// Default deconstructor.
@@ -226,6 +227,14 @@ namespace CrispyOctoSpork
 		/// <param name="filepath">The file path to load an image from for the texture.</param>
 		/// <returns>Returns a boolean indicating success.</returns>
 		bool LoadTextureFromFile(const char* filepath);
+
+		/// <summary>
+		/// Populates the <see cref="SDL_Texture"/> from a rendered text string.
+		/// </summary>
+		/// <param name="text">The text to display.</param>
+		/// <param name="textColor">The color of the text.</param>
+		/// <returns>Returns a boolean indicating success.</returns>
+		bool LoadFromRenderedText(std::string text, SDL_Color textColor);
 
 		/// <summary>
 		/// Called to cleanup and free the texture.
@@ -249,11 +258,14 @@ namespace CrispyOctoSpork
 		/// <returns>Returns a pointer to a <see cref="SDL_Renderer"/>.</returns>
 		SDL_Renderer* GetRenderer();
 
+		int width;
+		int height;
+
 	private:
 		SDL_Texture* texture;
 		SDL_Renderer* renderer;
-		int width;
-		int height;
+		TTF_Font* font;
+		int fontSize;
 	};
 
 	/// <summary>
@@ -466,6 +478,12 @@ namespace CrispyOctoSpork
 		if (!(IMG_Init(imgFlags) & imgFlags))
 		{
 			std::cout << "Failed to create renderer: " << IMG_GetError() << std::endl;
+			return false;
+		}
+
+		if (TTF_Init() == -1)
+		{
+			std::cout << "SDL_ttf could not initialize!: " << TTF_GetError() << std::endl;
 			return false;
 		}
 
@@ -780,19 +798,36 @@ namespace CrispyOctoSpork
 		this->renderer = NULL;
 		this->width = 0;
 		this->height = 0;
+		this->font = NULL;
 	}
 
-	Texture::Texture(SDL_Renderer* renderer)
+	Texture::Texture(SDL_Renderer* renderer, const char* fontFilePath, int fontSize)
 	{
 		this->texture = NULL;
 		this->width = 0;
 		this->height = 0;
 		this->renderer = renderer;
+		this->fontSize = fontSize;
+		this->font = NULL;
+
+		if (fontFilePath != NULL) 
+		{
+			font = TTF_OpenFont(fontFilePath, fontSize);
+			if (font == NULL)
+			{
+				std::cout << "Could not load the font" << TTF_GetError() << std::endl;
+			}
+		}
 	}
 
 	Texture::~Texture()
 	{
 		Free();
+
+		if (font != NULL) 
+		{
+			TTF_CloseFont(font);
+		}
 	}
 
 	bool Texture::LoadTextureFromFile(const char* filepath)
@@ -804,9 +839,44 @@ namespace CrispyOctoSpork
 		if (texture == NULL)
 		{
 			std::cout << "Could not load the texture from: " << filepath << " Error:" << SDL_GetError() << std::endl;
+			return false;
 		}
 
 		SDL_QueryTexture(texture, NULL, NULL, &width, &height);
+
+		return true;
+	}
+
+	inline bool Texture::LoadFromRenderedText(std::string text, SDL_Color textColor)
+	{
+		Free();
+
+		if (font == NULL)
+		{
+			std::cout << "No font associated with this texture! Make sure you construct it with one." << std::endl;
+			return false;
+		}
+
+		SDL_Surface* textSurface = TTF_RenderText_Solid(font, text.c_str(), textColor);
+
+		if (textSurface == NULL)
+		{
+			std::cout << "There was an error rendering the text surface." << TTF_GetError() << std::endl;
+			return false;
+		}
+
+		texture = SDL_CreateTextureFromSurface(renderer, textSurface);
+
+		if (texture == NULL)
+		{
+			std::cout << "There was an error creating the texture" << SDL_GetError() << std::endl;
+			return false;
+		}
+
+		width = textSurface->w;
+		height = textSurface->h;
+
+		SDL_FreeSurface(textSurface);
 
 		return true;
 	}
